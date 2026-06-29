@@ -1,0 +1,71 @@
+{
+  "centers": [
+    {
+      "id": "1",
+      "name": "الزهراء",
+      "username": "ز",
+      "password": "ز"
+    },
+    {
+      "id": "2",
+      "name": "بابل",
+      "username": "ل",
+      "password": "ل"
+    },
+    {
+      "id": "3",
+      "name": "الهادي",
+      "username": "ه",
+      "password": "ه"
+    },
+    {
+      "id": "4",
+      "name": "مرجان",
+      "username": "م",
+      "password": "م"
+    },
+    {
+      "id": "5",
+      "name": "الخالصة",
+      "username": "خ",
+      "password": "خ"
+    },
+    {
+      "id": "6",
+      "name": "الباقر",
+      "username": "ب",
+      "password": "ب"
+    },
+    {
+      "id": "7",
+      "name": "النهضة",
+      "username": "ن",
+      "password": "ن"
+    },
+    {
+      "id": "8",
+      "name": "القاضية",
+      "username": "ق",
+      "password": "ق"
+    },
+    {
+      "id": "9",
+      "name": "نادر",
+      "username": "د",
+      "password": "د"
+    },
+    {
+      "id": "10",
+      "name": "الكوثر",
+      "username": "ك",
+      "password": "ك"
+    },
+    {
+      "id": "11",
+      "name": "الوردية",
+      "username": "و",
+      "password": "و"
+    }
+  ],
+  "records": []
+}
