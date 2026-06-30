@@ -333,11 +333,6 @@ export default function CenterDashboard({ user, onLogout }: CenterDashboardProps
       return;
     }
 
-    if (!checkedOk) {
-      setSaveStatus({ type: "error", msg: "يرجى فحص الإحصائية أولاً قبل الحفظ." });
-      return;
-    }
-
     setLoading(true);
     setSaveStatus(null);
 
@@ -691,7 +686,7 @@ export default function CenterDashboard({ user, onLogout }: CenterDashboardProps
               <div className="text-xs text-slate-500 font-medium flex items-center gap-1.5 bg-slate-100 px-4 py-2.5 rounded-xl">
                 <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" />
                 <span>
-                  الرجاء فحص الإحصائية أولاً ثم الحفظ لإقفالها.
+                  قم بفحص الإحصائية للتأكد من صحة البيانات قبل الحفظ.
                 </span>
               </div>
 
@@ -710,7 +705,7 @@ export default function CenterDashboard({ user, onLogout }: CenterDashboardProps
                 <button
                   id="submit-record-btn"
                   type="submit"
-                  disabled={locked || loading || !checkedOk}
+                  disabled={locked || loading}
                   className="flex items-center justify-center gap-2 bg-gradient-to-r from-teal-600 to-teal-700 hover:from-teal-700 hover:to-teal-800 text-white font-extrabold px-10 py-3 rounded-xl cursor-pointer shadow-lg shadow-teal-600/15 disabled:from-teal-400 disabled:to-teal-400 disabled:cursor-not-allowed transition-all"
                 >
                   {loading ? (
