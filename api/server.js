@@ -4,6 +4,86 @@ import path from "path";
 import fs from "fs";
 
 const DB_FILE = "/tmp/data.json";
+const DB_KEY = "family_planning_db";
+
+// --- Storage backends ---
+// Priority: Vercel KV > JSONBin.io > local file (fallback)
+
+// 1. Vercel KV (Upstash Redis)
+const KV_REST_API_URL = process.env.KV_REST_API_URL || "";
+const KV_REST_API_TOKEN = process.env.KV_REST_API_TOKEN || "";
+
+async function readFromKV() {
+  if (!KV_REST_API_URL || !KV_REST_API_TOKEN) return null;
+  try {
+    const res = await fetch(`${KV_REST_API_URL}/get/${DB_KEY}`, {
+      headers: { Authorization: `Bearer ${KV_REST_API_TOKEN}` },
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    if (!json.result) return null;
+    return JSON.parse(json.result);
+  } catch (e) {
+    console.error("KV read error:", e.message);
+    return null;
+  }
+}
+
+async function writeToKV(data) {
+  if (!KV_REST_API_URL || !KV_REST_API_TOKEN) return false;
+  try {
+    const res = await fetch(`${KV_REST_API_URL}/set/${DB_KEY}`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${KV_REST_API_TOKEN}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(data),
+    });
+    return res.ok;
+  } catch (e) {
+    console.error("KV write error:", e.message);
+    return false;
+  }
+}
+
+// 2. JSONBin.io
+const JSONBIN_API_KEY = process.env.JSONBIN_API_KEY || "";
+const JSONBIN_BIN_ID = process.env.JSONBIN_BIN_ID || "";
+const JSONBIN_BASE = "https://api.jsonbin.io/v3/b";
+
+async function readFromJsonBin() {
+  if (!JSONBIN_API_KEY || !JSONBIN_BIN_ID) return null;
+  try {
+    const res = await fetch(`${JSONBIN_BASE}/${JSONBIN_BIN_ID}`, {
+      headers: { "X-Master-Key": JSONBIN_API_KEY },
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.record;
+  } catch (e) {
+    console.error("JSONBin read error:", e.message);
+    return null;
+  }
+}
+
+async function writeToJsonBin(data) {
+  if (!JSONBIN_API_KEY || !JSONBIN_BIN_ID) return false;
+  try {
+    const res = await fetch(`${JSONBIN_BASE}/${JSONBIN_BIN_ID}`, {
+      method: "PUT",
+      headers: {
+        "X-Master-Key": JSONBIN_API_KEY,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(data),
+    });
+    return res.ok;
+  } catch (e) {
+    console.error("JSONBin write error:", e.message);
+    return false;
+  }
+}
 
 const DEFAULT_CENTERS = [
   { id: "1", name: "الزهراء", username: "ز", password: "ز" },
@@ -46,22 +126,64 @@ function createEmptySection2() {
   };
 }
 
-function readDb() {
-  try {
-    if (fs.existsSync(DB_FILE)) {
-      const db = JSON.parse(fs.readFileSync(DB_FILE, "utf-8"));
-      if (!db.centers) db.centers = [...DEFAULT_CENTERS];
-      if (!db.records) db.records = [];
-      return db;
+let DB_CACHE = null;
+let DB_LOADING = null;
+
+async function readDb() {
+  if (DB_CACHE) return DB_CACHE;
+  if (DB_LOADING) return DB_LOADING;
+  DB_LOADING = (async () => {
+    // Priority 1: Vercel KV
+    if (KV_REST_API_URL) {
+      const kv = await readFromKV();
+      if (kv) {
+        if (!kv.centers) kv.centers = [...DEFAULT_CENTERS];
+        if (!kv.records) kv.records = [];
+        DB_CACHE = kv;
+        try { fs.writeFileSync(DB_FILE, JSON.stringify(kv, null, 2)); } catch {}
+        return kv;
+      }
     }
-  } catch (e) { console.error("DB error", e); }
-  const db = { centers: [...DEFAULT_CENTERS], records: [] };
-  try { fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2)); } catch {}
-  return db;
+    // Priority 2: JSONBin.io
+    if (JSONBIN_API_KEY) {
+      const jb = await readFromJsonBin();
+      if (jb) {
+        if (!jb.centers) jb.centers = [...DEFAULT_CENTERS];
+        if (!jb.records) jb.records = [];
+        DB_CACHE = jb;
+        try { fs.writeFileSync(DB_FILE, JSON.stringify(jb, null, 2)); } catch {}
+        return jb;
+      }
+    }
+    // Priority 3: Local file (fallback)
+    try {
+      if (fs.existsSync(DB_FILE)) {
+        const db = JSON.parse(fs.readFileSync(DB_FILE, "utf-8"));
+        if (!db.centers) db.centers = [...DEFAULT_CENTERS];
+        if (!db.records) db.records = [];
+        DB_CACHE = db;
+        return db;
+      }
+    } catch (e) { console.error("Local DB error", e); }
+    const db = { centers: [...DEFAULT_CENTERS], records: [] };
+    try { fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2)); } catch {}
+    DB_CACHE = db;
+    return db;
+  })();
+  const result = await DB_LOADING;
+  DB_LOADING = null;
+  return result;
 }
 
-function writeDb(db) {
-  try { fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2)); } catch (e) { console.error("Write error", e); }
+async function writeDb(db) {
+  DB_CACHE = db;
+  const tasks = [];
+  if (KV_REST_API_URL) tasks.push(writeToKV(db));
+  if (JSONBIN_API_KEY) tasks.push(writeToJsonBin(db));
+  tasks.push((async () => {
+    try { fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2)); } catch (e) { console.error("Local write error", e); }
+  })());
+  await Promise.allSettled(tasks);
 }
 
 const app = express();
@@ -75,93 +197,100 @@ app.use((req, res, next) => {
   next();
 });
 
-app.post("/api/auth/login", (req, res) => {
+app.post("/api/auth/login", async (req, res) => {
   const { username, password } = req.body;
   if (!username || !password) return res.status(400).json({ error: "مطلوب" });
   if (username === "1" && password === "1") return res.json({ user: { id: "master", name: "إدارة النظام (الماستر)", role: "master" } });
-  const center = readDb().centers.find(c => c.username.trim() === username.trim() && c.password.trim() === password.trim());
+  const db = await readDb();
+  const center = db.centers.find(c => c.username.trim() === username.trim() && c.password.trim() === password.trim());
   if (center) return res.json({ user: { id: center.id, name: center.name, role: "center" } });
   res.status(401).json({ error: "بيانات غير صحيحة" });
 });
 
-app.get("/api/centers", (req, res) => res.json(readDb().centers));
+app.get("/api/centers", async (req, res) => {
+  const db = await readDb();
+  res.json(db.centers);
+});
 
-app.post("/api/centers", (req, res) => {
+app.post("/api/centers", async (req, res) => {
   const { name, username, password } = req.body;
   if (!name || !username || !password) return res.status(400).json({ error: "جميع الحقول مطلوبة" });
-  const db = readDb();
+  const db = await readDb();
   if (db.centers.some(c => c.name === name || c.username === username)) return res.status(400).json({ error: "مكرر" });
   const c = { id: String(Date.now()), name, username, password };
-  db.centers.push(c); writeDb(db);
+  db.centers.push(c); await writeDb(db);
   res.json(c);
 });
 
-app.put("/api/centers/:id", (req, res) => {
-  const db = readDb();
+app.put("/api/centers/:id", async (req, res) => {
+  const db = await readDb();
   const i = db.centers.findIndex(c => c.id === req.params.id);
   if (i === -1) return res.status(404).json({ error: "غير موجود" });
   db.centers[i] = { ...db.centers[i], ...req.body };
-  writeDb(db);
+  await writeDb(db);
   res.json(db.centers[i]);
 });
 
-app.delete("/api/centers/:id", (req, res) => {
-  const db = readDb();
+app.delete("/api/centers/:id", async (req, res) => {
+  const db = await readDb();
   db.centers = db.centers.filter(c => c.id !== req.params.id);
   db.records = db.records.filter(r => r.centerId !== req.params.id);
-  writeDb(db);
+  await writeDb(db);
   res.json({ success: true });
 });
 
-app.get("/api/records", (req, res) => {
-  let f = readDb().records;
+app.get("/api/records", async (req, res) => {
+  const db = await readDb();
+  let f = db.records;
   if (req.query.centerId) f = f.filter(r => r.centerId === req.query.centerId);
   if (req.query.month) f = f.filter(r => r.month === Number(req.query.month));
   if (req.query.year) f = f.filter(r => r.year === Number(req.query.year));
   res.json(f);
 });
 
-app.post("/api/records", (req, res) => {
+app.post("/api/records", async (req, res) => {
   const { centerId, month, year, section1, section2, advisorName, programManager, directorName } = req.body;
   if (!centerId || !month || !year || !section1 || !section2) return res.status(400).json({ error: "بيانات غير مكتملة" });
-  const db = readDb();
+  const db = await readDb();
   const ei = db.records.findIndex(r => r.centerId === centerId && r.month === Number(month) && r.year === Number(year));
   if (ei !== -1 && db.records[ei].locked) return res.status(403).json({ error: "مقفلة" });
   const p = { centerId, month: Number(month), year: Number(year), dateCreated: ei === -1 ? new Date().toISOString() : db.records[ei].dateCreated, section1, section2, advisorName, programManager, directorName, locked: true };
   if (ei !== -1) db.records[ei] = p; else db.records.push(p);
-  writeDb(db);
+  await writeDb(db);
   res.json({ success: true, record: p });
 });
 
-app.patch("/api/records/request-unlock", (req, res) => {
+app.patch("/api/records/request-unlock", async (req, res) => {
   const { centerId, month, year, message } = req.body;
   if (!centerId || !month || !year) return res.status(400).json({ error: "بيانات غير مكتملة" });
-  const db = readDb();
+  const db = await readDb();
   const rec = db.records.find(r => r.centerId === centerId && r.month === Number(month) && r.year === Number(year));
   if (!rec) return res.status(404).json({ error: "غير موجود" });
   if (!rec.locked) return res.json({ success: true, message: "مفتوح" });
   rec.unlockRequested = true; rec.unlockMessage = message || "";
-  writeDb(db);
+  await writeDb(db);
   res.json({ success: true });
 });
 
-app.patch("/api/records/unlock", (req, res) => {
+app.patch("/api/records/unlock", async (req, res) => {
   const { centerId, month, year } = req.body;
   if (!centerId || !month || !year) return res.status(400).json({ error: "بيانات غير مكتملة" });
-  const db = readDb();
+  const db = await readDb();
   const rec = db.records.find(r => r.centerId === centerId && r.month === Number(month) && r.year === Number(year));
   if (!rec) return res.status(404).json({ error: "غير موجود" });
   rec.locked = false; rec.unlockRequested = false; rec.unlockMessage = "";
-  writeDb(db);
+  await writeDb(db);
   res.json({ success: true });
 });
 
-app.get("/api/records/unlock-requests", (req, res) => {
-  res.json(readDb().records.filter(r => r.unlockRequested));
+app.get("/api/records/unlock-requests", async (req, res) => {
+  const db = await readDb();
+  res.json(db.records.filter(r => r.unlockRequested));
 });
 
-app.get("/api/records/annual", (req, res) => {
-  let f = readDb().records;
+app.get("/api/records/annual", async (req, res) => {
+  const db = await readDb();
+  let f = db.records;
   if (req.query.centerId && req.query.centerId !== "all") f = f.filter(r => r.centerId === req.query.centerId);
   if (req.query.year) f = f.filter(r => r.year === Number(req.query.year));
   const lbm = {}, mf = [];
