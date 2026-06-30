@@ -1,5 +1,6 @@
 import "dotenv/config";
 import express from "express";
+import compression from "compression";
 import path from "path";
 import fs from "fs";
 
@@ -174,6 +175,33 @@ async function readDb() {
   return result;
 }
 
+const LOCK_KEY = "family_planning_db_lock";
+
+async function acquireLock() {
+  if (!KV_REST_API_URL || !KV_REST_API_TOKEN) return true;
+  for (let i = 0; i < 10; i++) {
+    try {
+      const res = await fetch(`${KV_REST_API_URL}/set/${LOCK_KEY}`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${KV_REST_API_TOKEN}`, "Content-Type": "application/json" },
+        body: "1",
+      });
+      if (res.ok) return true;
+    } catch {}
+    await new Promise(r => setTimeout(r, 200));
+  }
+  return false;
+}
+
+async function releaseLock() {
+  if (!KV_REST_API_URL || !KV_REST_API_TOKEN) return;
+  try {
+    await fetch(`${KV_REST_API_URL}/del/${LOCK_KEY}`, {
+      headers: { Authorization: `Bearer ${KV_REST_API_TOKEN}` },
+    });
+  } catch {}
+}
+
 async function writeDb(db) {
   DB_CACHE = db;
   const tasks = [];
@@ -186,6 +214,7 @@ async function writeDb(db) {
 }
 
 const app = express();
+app.use(compression());
 app.use(express.json());
 
 app.use((req, res, next) => {
@@ -250,13 +279,17 @@ app.get("/api/records", async (req, res) => {
 app.post("/api/records", async (req, res) => {
   const { centerId, month, year, section1, section2, advisorName, programManager, directorName } = req.body;
   if (!centerId || !month || !year || !section1 || !section2) return res.status(400).json({ error: "بيانات غير مكتملة" });
-  const db = await readDb();
-  const ei = db.records.findIndex(r => r.centerId === centerId && r.month === Number(month) && r.year === Number(year));
-  if (ei !== -1 && db.records[ei].locked) return res.status(403).json({ error: "مقفلة" });
-  const p = { centerId, month: Number(month), year: Number(year), dateCreated: ei === -1 ? new Date().toISOString() : db.records[ei].dateCreated, section1, section2, advisorName, programManager, directorName, locked: true };
-  if (ei !== -1) db.records[ei] = p; else db.records.push(p);
-  await writeDb(db);
-  res.json({ success: true, record: p });
+  const locked2 = await acquireLock();
+  if (!locked2) return res.status(503).json({ error: "الخادم مشغول، حاول مرة أخرى" });
+  try {
+    const db = await readDb();
+    const ei = db.records.findIndex(r => r.centerId === centerId && r.month === Number(month) && r.year === Number(year));
+    if (ei !== -1 && db.records[ei].locked) { releaseLock(); return res.status(403).json({ error: "مقفلة" }); }
+    const p = { centerId, month: Number(month), year: Number(year), dateCreated: ei === -1 ? new Date().toISOString() : db.records[ei].dateCreated, section1, section2, advisorName, programManager, directorName, locked: true };
+    if (ei !== -1) db.records[ei] = p; else db.records.push(p);
+    await writeDb(db);
+    res.json({ success: true, record: p });
+  } finally { releaseLock(); }
 });
 
 app.delete("/api/records/:centerId/:month/:year", async (req, res) => {

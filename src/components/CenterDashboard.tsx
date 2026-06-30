@@ -9,6 +9,7 @@ import {
   AlertTriangle, AlertCircle, RefreshCw, SearchCheck, Lock, Unlock, X, Check, Trash2
 } from "lucide-react";
 import { exportFormToPdf } from "../utils/pdfExport";
+import { retryFetch } from "../utils/retryFetch";
 import { 
   SubmissionRecord, 
   Section1Data, 
@@ -338,7 +339,7 @@ export default function CenterDashboard({ user, onLogout }: CenterDashboardProps
     setSaveStatus(null);
 
     try {
-      const response = await fetch("/api/records", {
+      const response = await retryFetch("/api/records", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -384,7 +385,7 @@ export default function CenterDashboard({ user, onLogout }: CenterDashboardProps
       return;
     }
     try {
-      const response = await fetch("/api/records/request-unlock", {
+      const response = await retryFetch("/api/records/request-unlock", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -410,7 +411,7 @@ export default function CenterDashboard({ user, onLogout }: CenterDashboardProps
     setShowDeleteModal(false);
     setLoading(true);
     try {
-      const response = await fetch(`/api/records/${user.id}/${selectedMonth}/${selectedYear}`, { method: "DELETE" });
+      const response = await retryFetch(`/api/records/${user.id}/${selectedMonth}/${selectedYear}`, { method: "DELETE" });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "فشل حذف الإحصائية");
       setLocked(false);
