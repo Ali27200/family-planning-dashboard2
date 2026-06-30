@@ -260,6 +260,16 @@ app.post("/api/records", async (req, res) => {
   res.json({ success: true, record: p });
 });
 
+app.delete("/api/records/:centerId/:month/:year", async (req, res) => {
+  const { centerId, month, year } = req.params;
+  const db = await readDb();
+  const idx = db.records.findIndex(r => r.centerId === centerId && r.month === Number(month) && r.year === Number(year));
+  if (idx === -1) return res.status(404).json({ error: "غير موجود" });
+  db.records.splice(idx, 1);
+  await writeDb(db);
+  res.json({ success: true });
+});
+
 app.patch("/api/records/request-unlock", async (req, res) => {
   const { centerId, month, year, message } = req.body;
   if (!centerId || !month || !year) return res.status(400).json({ error: "بيانات غير مكتملة" });

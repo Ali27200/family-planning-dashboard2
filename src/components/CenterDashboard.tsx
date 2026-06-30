@@ -6,7 +6,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { 
   LogOut, Save, Calendar, CheckCircle, FileText, Printer, FileDown,
-  AlertTriangle, AlertCircle, RefreshCw, SearchCheck, Lock, Unlock, X, Check
+  AlertTriangle, AlertCircle, RefreshCw, SearchCheck, Lock, Unlock, X, Check, Trash2
 } from "lucide-react";
 import { exportFormToPdf } from "../utils/pdfExport";
 import { 
@@ -65,6 +65,7 @@ export default function CenterDashboard({ user, onLogout }: CenterDashboardProps
   const [checkedOk, setCheckedOk] = useState(false);
   const [checkErrors, setCheckErrors] = useState<string[]>([]);
   const [showCheckModal, setShowCheckModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [auditResult, setAuditResult] = useState<{
     parityErrors: { label: string; clients: number; parity: number }[];
     contraErrors: { label: string; s1: number; s2: number }[];
@@ -405,6 +406,31 @@ export default function CenterDashboard({ user, onLogout }: CenterDashboardProps
     }
   };
 
+  const handleDelete = async () => {
+    setShowDeleteModal(false);
+    setLoading(true);
+    try {
+      const response = await fetch(`/api/records/${user.id}/${selectedMonth}/${selectedYear}`, { method: "DELETE" });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "فشل حذف الإحصائية");
+      setLocked(false);
+      setUnlockRequested(false);
+      setUnlockMessageText("");
+      setSection1(createEmptySection1());
+      setSection2(createEmptySection2());
+      setAdvisorName("");
+      setProgramManager("");
+      setDirectorName("بسام محمد ناصر");
+      setCheckedOk(false);
+      setSaveStatus({ type: "success", msg: "✓ تم حذف الإحصائية بنجاح. يمكنك إدخال بيانات جديدة." });
+      fetchHistory();
+    } catch (err: any) {
+      setSaveStatus({ type: "error", msg: err.message || "فشل الاتصال بالخادم." });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handlePrint = () => {
     window.print();
   };
@@ -678,6 +704,18 @@ export default function CenterDashboard({ user, onLogout }: CenterDashboardProps
                     )}
                   </div>
                 )}
+
+                <div className="border-t border-amber-200 pt-3 mt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowDeleteModal(true)}
+                    disabled={loading}
+                    className="flex items-center gap-2 bg-red-50 hover:bg-red-100 text-red-700 text-sm font-bold px-4 py-2.5 rounded-xl cursor-pointer border-2 border-red-200 hover:border-red-300 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    <span>حذف الإحصائية</span>
+                  </button>
+                </div>
               </div>
             )}
 
@@ -919,6 +957,41 @@ export default function CenterDashboard({ user, onLogout }: CenterDashboardProps
               className="bg-teal-600 hover:bg-teal-700 text-white font-bold px-6 py-2.5 rounded-xl cursor-pointer transition-all text-sm"
             >
               {auditResult.success ? "حسناً، إغلاق" : "إغلاق والتصحيح"}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* Delete Confirmation Modal */}
+    {showDeleteModal && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={() => setShowDeleteModal(false)}>
+        <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-center gap-3 mb-4">
+            <div className="h-12 w-12 rounded-2xl bg-red-100 flex items-center justify-center text-red-600">
+              <Trash2 className="h-6 w-6" />
+            </div>
+            <div>
+              <h2 className="text-lg font-black text-slate-900">تأكيد حذف الإحصائية</h2>
+              <p className="text-sm text-slate-500 font-medium">هذا الإجراء لا يمكن التراجع عنه.</p>
+            </div>
+          </div>
+          <p className="text-sm text-slate-700 font-medium bg-slate-50 rounded-xl p-3 mb-6">
+            هل أنت متأكد من حذف إحصائية شهر {MONTHS.find((m) => m.val === selectedMonth)?.name} سنة {selectedYear}؟
+          </p>
+          <div className="flex gap-3 justify-end">
+            <button
+              onClick={() => setShowDeleteModal(false)}
+              className="px-6 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl cursor-pointer transition-all text-sm"
+            >
+              إلغاء
+            </button>
+            <button
+              onClick={handleDelete}
+              disabled={loading}
+              className="px-6 py-2.5 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl cursor-pointer transition-all text-sm disabled:opacity-50"
+            >
+              {loading ? "جاري الحذف..." : "تأكيد الحذف"}
             </button>
           </div>
         </div>
