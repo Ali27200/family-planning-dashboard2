@@ -468,6 +468,17 @@ export default function CenterDashboard({ user, onLogout }: CenterDashboardProps
               <FileDown className="h-4 w-4" />
               <span>PDF</span>
             </button>
+            {locked && (
+              <button
+                type="button"
+                onClick={() => setShowDeleteModal(true)}
+                disabled={loading}
+                className="flex items-center gap-2 bg-red-50 hover:bg-red-100 text-red-700 text-sm font-bold px-4 py-2.5 rounded-xl cursor-pointer border-2 border-red-200 hover:border-red-300 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Trash2 className="h-4 w-4" />
+                <span>حذف الإحصائية</span>
+              </button>
+            )}
             <button
               id="logout-btn"
               onClick={onLogout}
@@ -705,17 +716,6 @@ export default function CenterDashboard({ user, onLogout }: CenterDashboardProps
                   </div>
                 )}
 
-                <div className="border-t border-amber-200 pt-3 mt-2">
-                  <button
-                    type="button"
-                    onClick={() => setShowDeleteModal(true)}
-                    disabled={loading}
-                    className="flex items-center gap-2 bg-red-50 hover:bg-red-100 text-red-700 text-sm font-bold px-4 py-2.5 rounded-xl cursor-pointer border-2 border-red-200 hover:border-red-300 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                    <span>حذف الإحصائية</span>
-                  </button>
-                </div>
               </div>
             )}
 

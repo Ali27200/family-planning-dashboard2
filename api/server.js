@@ -130,7 +130,6 @@ let DB_CACHE = null;
 let DB_LOADING = null;
 
 async function readDb() {
-  if (DB_CACHE) return DB_CACHE;
   if (DB_LOADING) return DB_LOADING;
   DB_LOADING = (async () => {
     // Priority 1: Vercel KV
