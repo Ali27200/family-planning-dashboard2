@@ -369,15 +369,22 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
 
   const handleBackup = async () => {
     try {
-      const res = await fetch("/api/backup/save-local", { method: "POST" });
-      const result = await res.json();
-      if (result.success) {
-        alert(`✅ تم حفظ النسخة في:\n${result.path}`);
-      } else {
-        alert("❌ " + (result.error || "فشل الحفظ"));
-      }
+      const res = await fetch("/api/backup");
+      const data = await res.json();
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      const now = new Date();
+      const ds = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}_${String(now.getHours()).padStart(2, "0")}-${String(now.getMinutes()).padStart(2, "0")}`;
+      link.download = `family-planning-backup-${ds}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      alert("✅ تم تحميل النسخة الاحتياطية\nاحفظها في مجلد D:\\الصيانة والخزن");
     } catch {
-      alert("❌ فشل الاتصال بالخادم");
+      alert("❌ فشل في تحميل النسخة الاحتياطية");
     }
   };
 
