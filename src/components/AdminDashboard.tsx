@@ -8,7 +8,7 @@ import {
   Building2, Plus, Edit2, Trash2, Calendar, FileSpreadsheet, 
   Printer, LogOut, CheckCircle2, ChevronLeft, AlertCircle,
   Database, RefreshCw, ShieldAlert, FileText, Check, X,
-  Lock, Unlock
+  Lock, Unlock, Download, Upload
 } from "lucide-react";
 import { 
   HealthCenter, SubmissionRecord, Section1Data, Section2Data, AgeRange, AGE_RANGES,
@@ -367,6 +367,71 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
     window.print();
   };
 
+  const handleBackup = async () => {
+    try {
+      const res = await fetch("/api/backup/save-local", { method: "POST" });
+      const result = await res.json();
+      if (result.success) {
+        alert(`✅ تم حفظ النسخة في:\n${result.path}`);
+      } else {
+        alert("❌ " + (result.error || "فشل الحفظ"));
+      }
+    } catch {
+      alert("❌ فشل الاتصال بالخادم");
+    }
+  };
+
+  const handleBackupDownload = async () => {
+    try {
+      const res = await fetch("/api/backup");
+      const data = await res.json();
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      const now = new Date();
+      const ds = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+      link.download = `family-planning-backup-${ds}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      alert("✅ تم تحميل النسخة الاحتياطية بنجاح");
+    } catch {
+      alert("❌ فشل في تحميل النسخة الاحتياطية");
+    }
+  };
+
+  const handleRestore = () => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".json";
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+      if (!confirm("سيتم استبدال جميع البيانات الحالية. هل أنت متأكد؟")) return;
+      try {
+        const text = await file.text();
+        const data = JSON.parse(text);
+        const res = await fetch("/api/restore", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ data, overwrite: true }),
+        });
+        const result = await res.json();
+        if (result.success) {
+          alert("✅ تمت استعادة البيانات بنجاح. سيتم إعادة تحميل الصفحة.");
+          window.location.reload();
+        } else {
+          alert("❌ " + (result.error || "فشل الاستعادة"));
+        }
+      } catch {
+        alert("❌ ملف غير صالح");
+      }
+    };
+    input.click();
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 py-8 px-4 sm:px-6 lg:px-8 dir-rtl text-right" style={{ direction: "rtl" }}>
       <div className="max-w-6xl mx-auto space-y-6">
@@ -552,6 +617,27 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                   >
                     <Printer className="h-3.5 w-3.5" />
                     <span>طباعة الاستمارة الرسمية</span>
+                  </button>
+                  <button
+                    onClick={handleBackup}
+                    className="flex items-center gap-1.5 bg-blue-50 hover:bg-blue-100 text-blue-800 text-xs font-black px-3.5 py-2 rounded-xl border border-blue-200 cursor-pointer transition-all"
+                  >
+                    <Database className="h-3.5 w-3.5" />
+                    <span>حفظ في الصيانة والخزن</span>
+                  </button>
+                  <button
+                    onClick={handleBackupDownload}
+                    className="flex items-center gap-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 text-xs font-black px-3.5 py-2 rounded-xl border border-indigo-200 cursor-pointer transition-all"
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    <span>تحميل نسخة</span>
+                  </button>
+                  <button
+                    onClick={handleRestore}
+                    className="flex items-center gap-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 text-xs font-black px-3.5 py-2 rounded-xl border border-amber-200 cursor-pointer transition-all"
+                  >
+                    <Upload className="h-3.5 w-3.5" />
+                    <span>استيراد</span>
                   </button>
                 </div>
               </div>

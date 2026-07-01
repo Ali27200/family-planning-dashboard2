@@ -363,6 +363,45 @@ async function startServer() {
     res.json({ monthsFound, total: { section1: totalSection1, section2: totalSection2 } });
   });
 
+  const BACKUP_DIR = process.env.BACKUP_DIR || "D:\\الصيانة والخزن";
+
+  // Backup endpoint - download all data
+  app.get("/api/backup", (req, res) => {
+    const db = readDb();
+    res.json(db);
+  });
+
+  // Save backup to local folder
+  app.post("/api/backup/save-local", (req, res) => {
+    try {
+      const db = readDb();
+      if (!fs.existsSync(BACKUP_DIR)) fs.mkdirSync(BACKUP_DIR, { recursive: true });
+      const now = new Date();
+      const ds = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}_${String(now.getHours()).padStart(2, "0")}-${String(now.getMinutes()).padStart(2, "0")}`;
+      const filePath = path.join(BACKUP_DIR, `family-planning-backup-${ds}.json`);
+      fs.writeFileSync(filePath, JSON.stringify(db, null, 2), "utf-8");
+      res.json({ success: true, path: filePath });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // Restore endpoint - upload full backup
+  app.post("/api/restore", (req, res) => {
+    const { data, overwrite } = req.body;
+    if (!data) return res.status(400).json({ error: "لا توجد بيانات" });
+    if (!data.centers || !data.records) return res.status(400).json({ error: "بيانات غير صالحة" });
+    const db = readDb();
+    if (overwrite) {
+      writeDb(data);
+    } else {
+      data.centers.forEach(c => { if (!db.centers.find((x: any) => x.id === c.id)) db.centers.push(c); });
+      data.records.forEach(r => { if (!db.records.find((x: any) => x.centerId === r.centerId && x.month === r.month && x.year === r.year)) db.records.push(r); });
+      writeDb(db);
+    }
+    res.json({ success: true, message: "تمت الاستعادة بنجاح" });
+  });
+
   // Vite integration middleware
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({

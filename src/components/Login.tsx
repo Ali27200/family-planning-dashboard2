@@ -4,7 +4,7 @@
  */
 
 import React, { useState } from "react";
-import { Lock, User, Activity, AlertCircle, Sparkles } from "lucide-react";
+import { Lock, User, Activity, AlertCircle, Sparkles, Download, Upload, Database } from "lucide-react";
 
 interface LoginProps {
   onLoginSuccess: (user: { id: string; name: string; role: "master" | "center" }) => void;
@@ -15,6 +15,62 @@ export default function Login({ onLoginSuccess }: LoginProps) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  const [backupStatus, setBackupStatus] = useState<string | null>(null);
+
+  const handleBackupDownload = async () => {
+    setBackupStatus(null);
+    try {
+      const res = await fetch("/api/backup");
+      const data = await res.json();
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      const now = new Date();
+      const ds = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+      link.download = `family-planning-backup-${ds}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      setBackupStatus("success");
+      setTimeout(() => setBackupStatus(null), 3000);
+    } catch {
+      setBackupStatus("error");
+    }
+  };
+
+  const handleRestore = () => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".json";
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+      if (!confirm("سيتم استبدال جميع البيانات الحالية. هل أنت متأكد؟")) return;
+      setBackupStatus(null);
+      try {
+        const text = await file.text();
+        const data = JSON.parse(text);
+        const res = await fetch("/api/restore", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ data, overwrite: true }),
+        });
+        const result = await res.json();
+        if (result.success) {
+          setBackupStatus("restored");
+          setTimeout(() => setBackupStatus(null), 3000);
+        } else {
+          setBackupStatus("error");
+        }
+      } catch {
+        setBackupStatus("error");
+      }
+    };
+    input.click();
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -151,6 +207,48 @@ export default function Login({ onLoginSuccess }: LoginProps) {
                 وباقي المراكز تستخدم الرمز الموحد (مثلاً ز لمركز الزهراء).
               </span>
             </div>
+          </div>
+
+          {/* Backup & Restore Section */}
+          <div className="mt-4 border-t border-slate-100 pt-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Database className="h-4 w-4 text-slate-500" />
+              <span className="text-xs font-bold text-slate-500">النسخ الاحتياطي</span>
+            </div>
+            {backupStatus === "success" && (
+              <div className="mb-2 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold p-2 rounded-xl text-center">
+                ✅ تم تحميل النسخة الاحتياطية بنجاح
+              </div>
+            )}
+            {backupStatus === "restored" && (
+              <div className="mb-2 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold p-2 rounded-xl text-center">
+                ✅ تمت استعادة البيانات بنجاح
+              </div>
+            )}
+            {backupStatus === "error" && (
+              <div className="mb-2 bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold p-2 rounded-xl text-center">
+                ❌ فشل العملية
+              </div>
+            )}
+            <div className="flex gap-2">
+              <button
+                onClick={handleBackupDownload}
+                className="flex-1 flex items-center justify-center gap-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 text-xs font-black px-3 py-2.5 rounded-xl border border-indigo-200 cursor-pointer transition-all"
+              >
+                <Download className="h-3.5 w-3.5" />
+                <span>تحميل نسخة احتياطية</span>
+              </button>
+              <button
+                onClick={handleRestore}
+                className="flex-1 flex items-center justify-center gap-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 text-xs font-black px-3 py-2.5 rounded-xl border border-amber-200 cursor-pointer transition-all"
+              >
+                <Upload className="h-3.5 w-3.5" />
+                <span>استعادة نسخة</span>
+              </button>
+            </div>
+            <p className="text-[10px] text-slate-400 text-center mt-2 font-medium">
+              يُنصح بأخذ نسخة احتياطية بشكل دوري وحفظها في D:\الصيانة والخزن
+            </p>
           </div>
         </div>
       </div>

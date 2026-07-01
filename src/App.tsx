@@ -18,36 +18,17 @@ export default function App() {
   const [user, setUser] = useState<UserSession | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Load session from localStorage on startup
+  // Session lives only in memory — no localStorage persistence
   useEffect(() => {
-    try {
-      const savedUser = localStorage.getItem("family_planning_session");
-      if (savedUser) {
-        setUser(JSON.parse(savedUser));
-      }
-    } catch (err) {
-      console.error("Error reading saved session from localStorage", err);
-    } finally {
-      setLoading(false);
-    }
+    setLoading(false);
   }, []);
 
   const handleLoginSuccess = (loggedInUser: UserSession) => {
     setUser(loggedInUser);
-    try {
-      localStorage.setItem("family_planning_session", JSON.stringify(loggedInUser));
-    } catch (err) {
-      console.error("Error storing session to localStorage", err);
-    }
   };
 
   const handleLogout = () => {
     setUser(null);
-    try {
-      localStorage.removeItem("family_planning_session");
-    } catch (err) {
-      console.error("Error removing session from localStorage", err);
-    }
   };
 
   if (loading) {

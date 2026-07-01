@@ -350,6 +350,49 @@ app.get("/api/records/annual", async (req, res) => {
   res.json({ monthsFound: mf, total: { section1: ts1, section2: ts2 } });
 });
 
+const BACKUP_DIR = process.env.BACKUP_DIR || "D:\\الصيانة والخزن";
+
+// Backup endpoint - download all data
+app.get("/api/backup", async (req, res) => {
+  const db = await readDb();
+  res.json(db);
+});
+
+// Save backup to local folder
+app.post("/api/backup/save-local", async (req, res) => {
+  try {
+    const db = await readDb();
+    if (!fs.existsSync(BACKUP_DIR)) fs.mkdirSync(BACKUP_DIR, { recursive: true });
+    const now = new Date();
+    const ds = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}_${String(now.getHours()).padStart(2, "0")}-${String(now.getMinutes()).padStart(2, "0")}`;
+    const filePath = path.join(BACKUP_DIR, `family-planning-backup-${ds}.json`);
+    fs.writeFileSync(filePath, JSON.stringify(db, null, 2), "utf-8");
+    res.json({ success: true, path: filePath });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Restore endpoint - upload full backup
+app.post("/api/restore", async (req, res) => {
+  const { data, overwrite } = req.body;
+  if (!data) return res.status(400).json({ error: "لا توجد بيانات" });
+  if (!data.centers || !data.records) return res.status(400).json({ error: "بيانات غير صالحة" });
+  const locked2 = await acquireLock();
+  if (!locked2) return res.status(503).json({ error: "الخادم مشغول" });
+  try {
+    const db = await readDb();
+    if (overwrite) {
+      await writeDb(data);
+    } else {
+      data.centers.forEach(c => { if (!db.centers.find(x => x.id === c.id)) db.centers.push(c); });
+      data.records.forEach(r => { if (!db.records.find(x => x.centerId === r.centerId && x.month === r.month && x.year === r.year)) db.records.push(r); });
+      await writeDb(db);
+    }
+    res.json({ success: true, message: "تمت الاستعادة بنجاح" });
+  } finally { releaseLock(); }
+});
+
 const distPath = path.join(process.cwd(), "dist");
 app.use(express.static(distPath));
 app.get("*", (req, res) => { if (!req.path.startsWith("/api")) res.sendFile(path.join(distPath, "index.html")); });
