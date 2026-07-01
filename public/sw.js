@@ -1,4 +1,4 @@
-const CACHE = "fp-cache-v1";
+const CACHE = "fp-cache-v2";
 const ASSETS = [
   "./",
   "./index.html",
